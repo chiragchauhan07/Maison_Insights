@@ -1,0 +1,13 @@
+.env
+.git
+.pytest_cache
+__pycache__
+*.py[cod]
+venv
+.venv
+.streamlit
+data
+outputs
+logs
+docs/screenshots
+tests

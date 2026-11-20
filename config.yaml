@@ -1,0 +1,65 @@
+apify:
+  actor_id: "6q70QEFc2Zk0ObldU"
+  max_reviews_per_brand: 100
+  timeout_seconds: 300
+  cache_days: 7
+server:
+  max_brands_per_job: 6
+  max_per_brand: 100
+  daily_budget_usd: 1.50
+  max_jobs_per_ip_per_hour: 5
+settings:
+  min_review_length: 10
+  near_duplicate_threshold: 90
+  vader_positive: 0.05
+  vader_negative: -0.05
+  # Explicit technology terms only; matching is by whole word or phrase.
+  tech_keywords: ["artificial intelligence", "virtual try-on", "augmented reality", "virtual reality", "AI", "AR", "VR", "chatbot", "mobile app", "app", "digital experience"]
+  sentiment_method: vader
+  multilingual_model: false
+brands:
+  # Pages for these labels may not be separate Trustpilot companies. Alternative domains are candidates to verify.
+  "Louis Vuitton": {domain: louisvuitton.com, category: Fashion, verified: false}
+  Gucci: {domain: gucci.com, category: Fashion, verified: false}
+  Dior: {domain: dior.com, category: Fashion, verified: false}
+  Chanel: {domain: chanel.com, category: Fashion, verified: false}
+  Hermès: {domain: hermes.com, category: Fashion, verified: false}
+  Prada: {domain: prada.com, category: Fashion, verified: false}
+  "Saint Laurent": {domain: ysl.com, category: Fashion, verified: false}
+  Balenciaga: {domain: balenciaga.com, category: Fashion, verified: false}
+  Burberry: {domain: burberry.com, category: Fashion, verified: false}
+  Fendi: {domain: fendi.com, category: Fashion, verified: false}
+  Versace: {domain: versace.com, category: Fashion, verified: false}
+  Valentino: {domain: valentino.com, category: Fashion, verified: false}
+  Givenchy: {domain: givenchy.com, category: Fashion, verified: false}
+  "Bottega Veneta": {domain: bottegaveneta.com, category: Fashion, verified: false}
+  Loewe: {domain: loewe.com, category: Fashion, verified: false}
+  "Ralph Lauren": {domain: ralphlauren.com, category: Fashion, verified: false}
+  "Raymond Luxury": {domain: raymond.in, alt_domains: [raymondluxury.com], category: Fashion, verified: false}
+  Rolex: {domain: rolex.com, category: "Watches & Jewellery", verified: false}
+  Cartier: {domain: cartier.com, category: "Watches & Jewellery", verified: false}
+  "Tiffany & Co.": {domain: tiffany.com, category: "Watches & Jewellery", verified: false}
+  Bulgari: {domain: bulgari.com, category: "Watches & Jewellery", verified: false}
+  Omega: {domain: omegawatches.com, category: "Watches & Jewellery", verified: false}
+  "Patek Philippe": {domain: patek.com, category: "Watches & Jewellery", verified: false}
+  "TAG Heuer": {domain: tagheuer.com, category: "Watches & Jewellery", verified: false}
+  "Van Cleef & Arpels": {domain: vancleefarpels.com, category: "Watches & Jewellery", verified: false}
+  "Estée Lauder": {domain: esteelauder.com, category: Beauty, verified: false}
+  "Dior Beauty": {domain: dior.com, alt_domains: [diorbeauty.com], category: Beauty, verified: false}
+  "Chanel Beauty": {domain: chanel.com, alt_domains: [chanelbeauty.com], category: Beauty, verified: false}
+  "La Mer": {domain: lamer.com, category: Beauty, verified: false}
+  "Tom Ford Beauty": {domain: tomfordbeauty.com, alt_domains: [tomford.com], category: Beauty, verified: false}
+  "Charlotte Tilbury": {domain: charlottetilbury.com, alt_domains: [charlottetilbury.co.uk], category: Beauty, verified: false}
+  "Armani Beauty": {domain: armanibeauty.com, alt_domains: [giorgioarmanibeauty-usa.com], category: Beauty, verified: false}
+  Hourglass: {domain: hourglasscosmetics.com, alt_domains: [hourglass.com], category: Beauty, verified: false}
+  Sisley: {domain: sisley-paris.com, alt_domains: [sisley.com], category: Beauty, verified: false}
+  "Forest Essentials": {domain: forestessentialsindia.com, alt_domains: [forestessentials.com], category: Beauty, verified: false}
+  "Kama Ayurveda": {domain: kamaayurveda.com, alt_domains: [kamaayurveda.in], category: Beauty, verified: false}
+aliases:
+  LV: "Louis Vuitton"
+  Hermes: "Hermès"
+  "Estee Lauder": "Estée Lauder"
+  Tiffany: "Tiffany & Co."
+  YSL: "Saint Laurent"
+  "Yves Saint Laurent": "Saint Laurent"
+  "Tom Ford": "Tom Ford Beauty"

@@ -1,0 +1,11 @@
+.env
+venv/
+*.db
+!seed/reviews_seed.db
+__pycache__/
+.pytest_cache/
+data/
+outputs/
+logs/
+docs/screenshots/
+*.log

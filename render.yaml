@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: luxury-review-intelligence
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: APIFY_TOKEN
+        sync: false
+      - key: DEMO_MODE
+        value: "0"
+      - key: MAX_BRANDS_PER_JOB
+        value: "6"
+      - key: MAX_PER_BRAND
+        value: "100"
+      - key: DAILY_BUDGET_USD
+        value: "1.50"
+      - key: MAX_JOBS_PER_IP_PER_HOUR
+        value: "5"

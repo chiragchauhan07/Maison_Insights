@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A clear, considered workspace for luxury brand review research.">
+  <meta name="theme-color" content="#f1f2f1">
+  <title>Maison Insights — Luxury Review Research</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect x='3' y='3' width='34' height='34' rx='11' fill='%23131618'/%3E%3Cpath d='M11 25l6-7 5 4 7-9' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/css/styles.css">
+  <script src="/js/charts.js" defer></script>
+  <script src="/js/app.js" defer></script>
+</head>
+<body>
+  <main id="landing" class="landing" aria-labelledby="landing-title">
+    <section class="landing-hero">
+      <figure class="landing-art" aria-label="Maison Insights logo">
+        <img src="/logo5.png" alt="Maison Insights">
+      </figure>
+      <div class="landing-copy">
+        <p class="landing-eyebrow"><span></span> CUSTOMER VOICE, CONSIDERED</p>
+        <h1 id="landing-title">Understand what<br>people <span class="rotating-word"><span id="rotating-word">value</span>.</span></h1>
+        <p class="landing-description">Make sense of what customers say. Explore public Trustpilot reviews across 36 luxury brands, with sentiment, themes and the details behind each score.</p>
+        <button id="landing-start" class="button landing-cta" type="button">Start Analysis <span aria-hidden="true">↗</span></button>
+      </div>
+    </section>
+  </main>
+
+  <div id="application" hidden>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <a class="brand" href="#landing" id="back-home" aria-label="Return to Maison Insights home">
+        <span class="landing-wordmark-mark" aria-hidden="true">MI</span>
+        <span class="brand-name">Maison Insights</span>
+      </a>
+      <p class="nav-caption">WORKSPACE</p>
+      <nav class="side-nav">
+        <a class="nav-link active" href="#overview"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></svg><span>Overview</span></a>
+        <a class="nav-link" href="#analysis-panel"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5m0 14h17"/><path d="m7 15 4-5 3 2 5-7"/></svg><span>New analysis</span></a>
+        <a class="nav-link" id="nav-results" href="#results-panel" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg><span>Results</span><span class="nav-count" id="nav-review-count">0</span></a>
+      </nav>
+      <div class="sidebar-bottom">
+        <section id="connection-card" class="source-card connection-card" aria-labelledby="source-title">
+          <p class="nav-caption" id="source-title">DATA SOURCE</p>
+          <div class="source-line"><span class="connection-dot" id="connection-dot"></span><div><strong>Trustpilot</strong><span id="connection-label">Checking connection</span></div></div>
+          <p id="connection-description">Checking the collection service.</p>
+          <button id="connection-help" class="text-link" type="button">Connection settings <span aria-hidden="true">↗</span></button>
+        </section>
+      </div>
+    </aside>
+
+    <main id="overview" class="main-area">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>Workspace</span><span class="crumb-divider" aria-hidden="true">/</span><strong>Luxury review research</strong></div>
+        <div class="top-actions"><span id="top-status" class="status-chip"><i aria-hidden="true"></i><span>Checking connection</span></span><button class="method-button" id="reopen-progress" type="button" hidden>View progress</button><button class="method-button" id="help-button" type="button">Method</button></div>
+      </header>
+
+      <div class="page-content">
+        <section class="welcome-row">
+          <div><p class="overline">CUSTOMER VOICE · LUXURY BRANDS</p><h1>New analysis</h1><p class="page-subtitle">Choose the brands and reviews you want to understand.</p></div>
+        </section>
+
+        <div id="service-alert" class="service-alert" role="status" hidden><span class="alert-icon" aria-hidden="true">i</span><div><strong id="service-alert-title">Fresh collection needs an Apify token</strong><p id="service-alert-message">Add APIFY_TOKEN to this project's .env file, then restart the app. Cached reviews and sample mode remain available.</p></div><button id="alert-settings" class="button button-small" type="button">View setup</button></div>
+
+        <section class="overview-strip" aria-label="Workspace information">
+          <div class="overview-stat"><span>Reviews in library</span><strong id="metric-reviews">—</strong></div>
+          <div class="overview-stat"><span>Brands available</span><strong id="metric-brands">36</strong></div>
+          <div class="overview-stat"><span>Categories</span><strong>03</strong></div>
+          <div class="overview-source"><span class="source-mark" aria-hidden="true">★</span><span><strong>Trustpilot</strong><small>Public reviews</small></span></div>
+        </section>
+
+        <div class="workspace-grid">
+          <section class="panel analysis-panel" id="analysis-panel" aria-labelledby="analysis-title">
+            <div class="panel-heading"><div><div class="section-kicker"><span class="step-number">01</span><span>DEFINE YOUR SAMPLE</span></div><h2 id="analysis-title">Choose brands</h2><p>Select the brands you want to include in this analysis.</p></div><span class="source-label"><span class="tp-star" aria-hidden="true">★</span> Public Trustpilot reviews</span></div>
+
+            <div class="brand-toolbar">
+              <label class="brand-search-label" for="brand-search"><span class="sr-only">Search brands</span><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg><input id="brand-search" type="search" placeholder="Search brands" autocomplete="off"></label>
+              <div id="category-tabs" class="category-tabs" role="group" aria-label="Filter brands by category">
+                <button type="button" class="category-tab active" data-category="All categories" aria-pressed="true">All <span>36</span></button>
+                <button type="button" class="category-tab" data-category="Fashion" aria-pressed="false">Fashion <span>17</span></button>
+                <button type="button" class="category-tab" data-category="Watches & Jewellery" aria-pressed="false">Watches <span>8</span></button>
+                <button type="button" class="category-tab" data-category="Beauty" aria-pressed="false">Beauty <span>11</span></button>
+              </div>
+            </div>
+            <div class="brand-list-heading"><span>AVAILABLE BRANDS</span><span id="selection-count">0 selected</span></div>
+            <div id="brand-list" class="brand-list" aria-label="Available brands"></div>
+            <div id="brand-list-empty" class="brand-list-empty" hidden>No brands match this search. Try another name or category.</div>
+            <div id="selected-brands" class="selected-brands" hidden aria-label="Selected brands"></div>
+
+            <div class="form-divider"></div>
+            <div class="settings-row">
+              <label class="field-label limit-field" for="per-brand"><span>Reviews per brand</span><strong class="value-pill"><span id="limit-display">20</span></strong><input id="per-brand" name="per_brand" type="range" min="1" max="100" value="20"><span class="range-meta"><span>1 review</span><span id="limit-cap">Maximum 100</span></span></label>
+              <label class="switch-setting"><span><strong>Collect fresh reviews</strong><small>Skip recent reviews in the local cache.</small></span><input id="refresh-toggle" name="refresh" type="checkbox"><span class="switch-ui" aria-hidden="true"></span></label>
+              <label class="switch-setting demo-setting"><span><strong>Use sample reviews</strong><small>No Apify call or credit used.</small></span><input id="demo-toggle" name="demo" type="checkbox"><span class="switch-ui" aria-hidden="true"></span></label>
+            </div>
+          </section>
+
+          <aside class="panel order-summary" aria-labelledby="summary-title">
+            <div class="section-kicker"><span class="step-number muted-step">02</span><span>ANALYSIS SUMMARY</span></div>
+            <h2 id="summary-title">Your selection</h2>
+            <p class="summary-intro">Review your sample before starting.</p>
+            <div id="ticket-brands" class="ticket-brands"><p class="empty-ticket">Choose one or more brands to get started.</p></div>
+            <div class="summary-divider"></div>
+            <div class="estimate-row"><span>Reviews to analyze</span><strong id="estimate-reviews">0</strong></div>
+            <div class="estimate-row"><span>Estimated Apify spend</span><strong id="estimate-cost">$0.00</strong></div>
+            <div id="budget-warning" class="budget-warning" hidden></div>
+            <button id="cached-only" class="text-link cached-only" type="button" hidden>Use cached brands only</button>
+            <button id="start-analysis" class="button button-dark start-button" type="button" disabled>Create analysis <span aria-hidden="true">→</span></button>
+            <p id="order-note" class="form-note" aria-live="polite">Select at least one brand to continue.</p>
+          </aside>
+        </div>
+
+        <dialog id="progress-dialog" class="progress-dialog" aria-labelledby="run-title">
+          <div class="progress-dialog-head"><span class="section-kicker"><span class="step-number muted-step">LIVE</span><span>ANALYSIS PROGRESS</span></span><button id="progress-close" class="dialog-x" type="button" aria-label="Close progress">×</button></div>
+          <section id="run-panel" class="run-panel" aria-labelledby="run-title">
+            <div class="panel-heading run-heading"><div><h2 id="run-title">Your analysis is underway</h2><p id="run-summary">Starting your review analysis.</p></div><span id="run-state" class="run-state idle"><i aria-hidden="true"></i><span>Starting</span></span></div>
+            <div class="progress-overview"><div class="progress-top"><strong id="progress-label">Preparing your analysis…</strong><span id="progress-percent">0%</span></div><div class="progress-track" role="progressbar" aria-label="Analysis progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="progress-fill"></span></div><div class="progress-stages" aria-label="Analysis stages"><span data-progress-stage="fetch">Collect</span><span data-progress-stage="prep">Clean</span><span data-progress-stage="cook">Score</span><span data-progress-stage="plate">Summarize</span><span data-progress-stage="serve">Export</span></div></div>
+            <div class="run-brands" id="run-brands"></div>
+            <div class="activity-heading"><strong>Live updates</strong></div>
+            <ol id="activity-feed" class="activity-feed" aria-live="polite" aria-relevant="additions text"></ol>
+            <div id="run-error" class="run-error" role="alert" hidden></div>
+            <button id="download-run" class="button button-dark full-button" type="button" hidden>Download Excel report <span aria-hidden="true">↓</span></button>
+            <button id="view-findings" class="button button-dark full-button" type="button" hidden>View findings <span aria-hidden="true">→</span></button>
+          </section>
+        </dialog>
+
+        <section id="results-panel" class="results-panel" aria-labelledby="results-title" hidden>
+          <div class="results-title-row"><div><div class="section-kicker"><span class="step-number">04</span><span>FINDINGS</span></div><h2 id="results-title">Review sentiment</h2><p id="results-subtitle">The selected reviews, scored and summarized.</p></div><div class="results-tools"><span id="demo-badge" class="demo-badge" hidden>Sample data</span><button id="download-results" class="button button-dark" type="button">Download report <span aria-hidden="true">↓</span></button></div></div>
+          <div id="summary-cards" class="result-metrics"></div>
+          <p id="result-cleaning-note" class="result-cleaning-note"></p>
+          <div class="charts-grid">
+            <article class="panel chart-card sentiment-card"><div class="chart-title"><div><span class="section-kicker">SENTIMENT MIX</span><h3>Overall sentiment</h3></div></div><div class="sentiment-chart-layout"><div id="overall-donut" class="chart-donut"></div><div id="donut-legend" class="legend-row"></div></div></article>
+            <article class="panel chart-card"><div class="chart-title"><div><span class="section-kicker">BRAND COMPARISON</span><h3>Sentiment by brand</h3></div></div><div id="brand-bars" class="bar-chart"></div></article>
+            <article class="panel chart-card"><div class="chart-title"><div><span class="section-kicker">CATEGORY</span><h3>Sentiment by category</h3></div></div><div id="category-bars" class="bar-chart"></div></article>
+            <article class="panel chart-card"><div class="chart-title"><div><span class="section-kicker">SOURCE</span><h3>Review platforms</h3></div></div><div id="platform-bars" class="bar-chart"></div></article>
+            <article class="panel chart-card"><div class="chart-title"><div><span class="section-kicker">QUALITY CHECK</span><h3>Rating and sentiment</h3></div></div><p id="mismatch-note" class="chart-note"></p><div id="rating-check"></div></article>
+            <article class="panel chart-card"><div class="chart-title"><div><span class="section-kicker">REVIEW LANGUAGE</span><h3>Common themes</h3></div></div><div id="theme-chips" class="theme-chips"></div></article>
+            <article class="panel chart-card" id="tech-card"><div class="chart-title"><div><span class="section-kicker">DIGITAL EXPERIENCE</span><h3>Technology mentions</h3></div></div><div id="tech-chart"></div></article>
+          </div>
+          <article class="panel review-panel" id="review-explorer"><div class="review-toolbar"><div><span class="section-kicker">REVIEW EXPLORER</span><h3>Customer reviews</h3><p id="review-count-note">Filter and inspect collected review notes.</p></div><div class="review-filters"><label for="review-sentiment">Sentiment<select id="review-sentiment" name="sentiment"><option value="">All sentiments</option><option>Positive</option><option>Neutral</option><option>Negative</option></select></label><label for="review-brand">Brand<select id="review-brand" name="brand"><option value="">All brands</option></select></label></div></div><p id="reviews-empty" class="empty-state" hidden></p><div id="review-table" class="review-list"></div><button id="load-more" class="button button-light" type="button" hidden>Load more reviews</button></article>
+        </section>
+        <footer class="page-footer"><span>MAISON INSIGHTS</span><span>Public Trustpilot research · Local workspace</span></footer>
+      </div>
+    </main>
+  </div>
+  </div>
+
+  <dialog id="connection-dialog" class="settings-dialog" aria-labelledby="dialog-title"><form method="dialog"><button class="dialog-x" aria-label="Close connection settings">×</button></form><span class="section-kicker">CONNECTION SETTINGS</span><h2 id="dialog-title">Connect Apify</h2><div id="dialog-status" class="dialog-status"></div><ol><li>Create or copy an Apify API token from your Apify account.</li><li>In this project's <code>.env</code> file, set <code>APIFY_TOKEN=your_token</code>.</li><li>Save the file, restart the app, then check the status again.</li></ol><p class="dialog-security">Keep your token private. This app does not send the token to the browser.</p><button class="button button-light" type="button" id="refresh-status">Check connection</button></dialog>
+  <dialog id="about-dialog" class="settings-dialog" aria-labelledby="about-title"><form method="dialog"><button class="dialog-x" aria-label="Close method">×</button></form><span class="section-kicker">RESEARCH METHOD</span><h2 id="about-title">How this analysis works</h2><p>Collect public Trustpilot reviews, remove duplicates, validate review text, score title and text with VADER, then export the findings.</p><ul><li>Star ratings stay numeric and conflicts with sentiment are flagged.</li><li>Reviewer names and profile links are not stored.</li><li>Unverified company domains are identified in the brand selector.</li></ul><p>Trustpilot is the only review source in this version.</p></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden><span id="toast-message"></span><button id="toast-close" type="button" aria-label="Dismiss notification">×</button></div>
+</body>
+</html>
