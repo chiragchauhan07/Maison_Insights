@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Condition, RLock, Thread
 from tempfile import TemporaryDirectory
+import asyncio
 import hashlib
 import hmac
 import json
@@ -238,10 +239,19 @@ class JobManager:
                 try:
                     from vercel.queue import QueueClient
                     queue = QueueClient(region=os.getenv("QUEUE_REGION", "bom1"))
-                    await queue.send("luxury-review-jobs", {"job_id": job_id},
-                                     retention=timedelta(days=7), idempotency_key=job_id)
+                    for attempt in range(3):
+                        try:
+                            await queue.send("luxury-review-jobs", {"job_id": job_id},
+                                             retention=timedelta(days=7), idempotency_key=job_id)
+                            break
+                        except Exception as error:
+                            # A timeout can happen after Vercel accepted the message.
+                            # Reusing the same key makes retrying safe in that case.
+                            if type(error).__name__ != "CommunicationError" or attempt == 2:
+                                raise
+                            await asyncio.sleep(2 ** attempt)
                 except Exception as error:
-                    logger.error("Could not queue job %s (%s).", job_id[:8], type(error).__name__)
+                    logger.exception("Could not queue job %s (%s).", job_id[:8], type(error).__name__)
                     job["status"] = "failed"
                     job["result"] = {"stats": {}, "brand_status": {}, "errors": ["The analysis could not be queued. Please try again later."], "charts": {}, "sample_reviews": [], "demo": bool(job["demo"])}
                     job["finished"] = True
@@ -305,6 +315,7 @@ class JobManager:
         if database._postgres_configured():
             database.update_job(job_id, status="running")
         self.emit(job_id, "order", "progress", message="Your analysis has entered the collection queue.")
+        phase = "collecting and analyzing reviews"
         try:
             def collection_function(brand, domain, limit):
                 if job["demo"]:
@@ -350,14 +361,14 @@ class JobManager:
             job["reviews"] = review_rows
             job["excel_path"] = result.get("excel_path", "")
             if database._postgres_configured() and job["excel_path"]:
+                phase = "uploading the workbook to Vercel Blob"
                 if not os.getenv("BLOB_READ_WRITE_TOKEN"):
                     raise RuntimeError("Vercel Blob read/write token is not configured")
                 from vercel import blob
                 workbook = Path(job["excel_path"])
-                uploaded = __import__("asyncio").run(blob.put_blob(
+                uploaded = asyncio.run(blob.put_blob(
                     f"analysis-reports/{job_id}.xlsx", workbook.read_bytes(), access="private",
                     content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    ttl_days=30,
                 ))
                 job["excel_path"] = uploaded.url
             raw_status = result.get("brand_status", {})
@@ -370,11 +381,14 @@ class JobManager:
                 "sample_reviews": review_rows[:10],
             }
             if database._postgres_configured():
+                phase = "saving the analysis results"
                 database.update_job(job_id, reviews=review_rows, excel_path=job["excel_path"], result=job["result"])
             if not job["demo"]:
+                phase = "recording Apify usage"
                 collected = int(result.get("stats", {}).get("total_collected_this_run", 0))
                 actual_estimate = job["billable_runs"] * 0.005 + collected * 0.001
                 add_daily_spend(actual_estimate)
+            phase = "publishing the completed status"
             self.emit(job_id, "serve", "done", message="Analysis complete. Your workbook is ready.",
                       counts={"fetched": int(result.get("stats", {}).get("total_collected_this_run", 0)),
                               "scored": int(result.get("stats", {}).get("final_unique", 0))})
@@ -382,7 +396,7 @@ class JobManager:
             if database._postgres_configured():
                 database.update_job(job_id, status="done")
         except Exception as error:
-            logger.error("Job %s failed (%s).", job_id[:8], type(error).__name__)
+            logger.exception("Job %s failed while %s (%s).", job_id[:8], phase, type(error).__name__)
             job["status"] = "failed"
             job["result"] = {"stats": {}, "brand_status": {}, "errors": ["The analysis could not finish. Please try again later."], "charts": {}, "sample_reviews": [], "demo": bool(job["demo"])}
             if database._postgres_configured():
