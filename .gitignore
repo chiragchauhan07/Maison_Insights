@@ -9,3 +9,6 @@ outputs/
 logs/
 docs/screenshots/
 *.log
+
+.vercel
+.env*
