@@ -8,7 +8,7 @@ services:
       - key: APIFY_TOKEN
         sync: false
       - key: DEMO_MODE
-        value: "0"
+        value: "1"
       - key: MAX_BRANDS_PER_JOB
         value: "6"
       - key: MAX_PER_BRAND

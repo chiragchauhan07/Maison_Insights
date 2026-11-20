@@ -90,11 +90,36 @@ Technology context uses explicit whole-word terms only. `online` and `website` a
 
 The planning estimate is approximately `$0.005` per actor run plus `$0.001` per requested review. The actual charge is controlled by Apify and can differ. The app caps reviews per brand, brands per order, concurrent jobs, hourly jobs per hashed client IP, and daily estimated spend. A refresh can consume credit even when a prior cache exists.
 
-## Deployment on Render
+## Deploy on Vercel (frontend) and Render (backend)
 
-Connect the repository to Render and deploy using `render.yaml` (Docker runtime). Set the `APIFY_TOKEN` secret in the Render dashboard before enabling real collection. `DEMO_MODE=1` is the shipped safe default; change it to `0` to accept real orders. The process is intentionally one Uvicorn worker because its FIFO jobs and SSE state are held in memory.
+This project uses Vercel for its static frontend and Render for the FastAPI backend. The backend is a long-running, single-worker service: it keeps the FIFO job queue and live SSE events in process memory and writes the review cache to SQLite. Deploying that process as a Vercel Function would make jobs/events unreliable and its local filesystem is not durable. `vercel.json` therefore publishes only `web/` and forwards `/api/*` to the Render service, preserving same-origin API calls in the browser.
 
-Render's free service may sleep after inactivity, and its disk is ephemeral. Jobs in progress and the SQLite cache do not survive a restart. To package a local cache for first boot, run `python export_seed.py`; review `seed/reviews_seed.db` for the expected cache and commit it if appropriate. The exporter copies only the approved review columns plus collection history; it does not copy author/profile fields. On startup the app copies this seed into `data/reviews.db` only if the local database is absent. Keep the seed modest in size because it is included in the image.
+### 1. Deploy the backend to Render
+
+1. Push this repository to GitHub and open the repository in Render's **New + → Blueprint** flow.
+2. Select `render.yaml` and create the `luxury-review-intelligence` web service. The Dockerfile starts one Uvicorn worker.
+3. Set `APIFY_TOKEN` as a secret in the Render service's Environment settings. Keep `DEMO_MODE=1` while validating the deployment; change it to `0` only when you want real Trustpilot collection and have checked the Apify account budget.
+4. Wait for the deployment to finish, then open `https://<your-render-service>.onrender.com/api/health`. It should return `{"ok":true}`. Copy the exact service hostname from Render.
+
+The Blueprint currently uses Render's free plan. Free services can sleep and their filesystem is ephemeral, so SQLite cache/history and unfinished jobs are lost when the service restarts. For a persistent production cache, use a Render plan that supports a persistent disk, attach one at `/app/data` (the SQLite database is `data/reviews.db`), and keep one service instance. The workbook is created for the duration of a job and can be downloaded before the service restarts. A local seed database can be created with `python export_seed.py`; inspect it before committing.
+
+### 2. Connect and deploy the Vercel frontend
+
+1. Open `vercel.json` and replace `YOUR-RENDER-SERVICE` in the `/api/:path*` rewrite destination with the exact Render hostname, without `https://` or a trailing slash. For example, `https://luxury-review-intelligence-ab12.onrender.com/api/:path*`.
+2. Commit and push that hostname change to GitHub (or make the edit before the first push if you have not pushed yet).
+3. In Vercel, choose **Add New → Project**, import `chiragchauhan07/Percepta`, and deploy from the `main` branch. Keep the project root at the repository root. The checked-in config selects the `web/` output directory; no build command or API environment variable is needed.
+4. Open the Vercel deployment URL. The page should load, **Trustpilot** connection status should resolve, and a demo analysis should finish. With `DEMO_MODE=1`, the UI uses sample reviews; switch to `0` in Render after setting `APIFY_TOKEN` to enable fresh collection.
+
+The Vercel rewrite keeps browser API requests and EventSource updates on the Vercel hostname. Do not replace it with a direct browser-to-Render URL unless you also configure backend CORS for the Vercel domain. Every push to the connected GitHub branch triggers a new Vercel deployment.
+
+### 3. Deployment smoke checks
+
+- Vercel home page and `/css/styles.css`, `/js/app.js`, and `/logo5.png` load successfully.
+- `https://<your-vercel-domain>/api/health` returns `{"ok":true}` through the rewrite.
+- The UI reports demo mode while `DEMO_MODE=1`; start one sample analysis and confirm progress events complete and the results appear.
+- After entering `APIFY_TOKEN` in Render and setting `DEMO_MODE=0`, refresh the connection status and verify the UI reports Apify connected before placing a small real order.
+
+Never put `APIFY_TOKEN` in Vercel, frontend JavaScript, `vercel.json`, or GitHub. Keep it only as a Render secret. Review the Apify budget before testing real collection.
 
 ## Environment variables
 
