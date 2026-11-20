@@ -6,14 +6,15 @@ This app is a focused workspace for public Trustpilot reviews from the 36 config
 
 1. Select brands, a review limit, and whether to refresh the cache.
 2. Reuse recent local reviews when the cache is sufficient; otherwise start one Apify actor run and poll its status.
-3. Map reviews to the required 13 columns and store unique review IDs in SQLite.
+3. Map reviews to the required 13 columns and store unique review IDs in SQLite locally or Postgres on Vercel.
 4. Remove exact duplicates, flag near duplicates, and discard missing or too-short review text.
 5. Score the review title and text with VADER; report conflicts between star ratings and labels.
 6. Show interactive charts and reviews, then export the data and collection history to Excel.
 
 ## Files
 
-- `server.py` — FastAPI app, API endpoints, safety limits, SSE events, and the single-worker job queue.
+- `server.py` — FastAPI app, API endpoints, safety limits, SSE events, and job publishing.
+- `worker.py` — Vercel Daemon queue consumer for long-running collection and analysis jobs.
 - `web/index.html` — accessible static screens, semantic content, and inline line-art illustrations.
 - `web/css/styles.css` — responsive white and gray research workspace, reduced-motion rules, and layout.
 - `web/js/app.js` — brand selection, job creation and resume, live progress, results, review filters, and downloads.
@@ -21,7 +22,7 @@ This app is a focused workspace for public Trustpilot reviews from the 36 config
 - `config.yaml` — exact brand list, categories, unverified domain guesses, aliases, and analysis settings.
 - `collector.py` — Trustpilot Apify actor input, live run polling, mapping, and explicit technology matching.
 - `pipeline.py` — cache reuse, cleaning, sentiment, chart data, workbook export, and SSE progress events.
-- `database.py` — SQLite storage, integer ratings, cache history, daily spend, and hashed-IP rate-limit records.
+- `database.py` — local SQLite plus deployed PostgreSQL storage for reviews, collection history, job state, progress events, daily spend, and hashed-IP rate limits.
 - `cleaner.py` — review validation, exact and near-duplicate handling, and cleaning counters.
 - `sentiment.py` — VADER scoring, optional multilingual fallback, mismatch flags, and themes.
 - `exporter.py` — six-sheet Excel export with the 13 required columns and analysis fields.
@@ -30,7 +31,7 @@ This app is a focused workspace for public Trustpilot reviews from the 36 config
 - `collect_all.py` — confirmed sequential collection and optional cache top-up.
 - `check_domains.py` — confirmed one-review domain checks saved outside the config.
 - `export_seed.py` — whitelist-based SQLite seed export that drops any unapproved columns.
-- `Dockerfile`, `render.yaml`, `.dockerignore` — one-worker container and Render deployment.
+- `Dockerfile`, `.dockerignore`, `vercel.json`, `.python-version` — Vercel FastAPI service and worker daemon deployment configuration.
 - `run_web.bat` — Windows launcher for the FastAPI app.
 - `requirements.txt`, `requirements-dev.txt` — pinned runtime and development dependencies.
 - `tests/` — API, data quality, pipeline, and workbook tests.
@@ -90,42 +91,43 @@ Technology context uses explicit whole-word terms only. `online` and `website` a
 
 The planning estimate is approximately `$0.005` per actor run plus `$0.001` per requested review. The actual charge is controlled by Apify and can differ. The app caps reviews per brand, brands per order, concurrent jobs, hourly jobs per hashed client IP, and daily estimated spend. A refresh can consume credit even when a prior cache exists.
 
-## Deploy on Vercel (frontend) and Render (backend)
+## Deploy the complete application on Vercel
 
-This project uses Vercel for its static frontend and Render for the FastAPI backend. The backend is a long-running, single-worker service: it keeps the FIFO job queue and live SSE events in process memory and writes the review cache to SQLite. Deploying that process as a Vercel Function would make jobs/events unreliable and its local filesystem is not durable. `vercel.json` therefore publishes only `web/` and forwards `/api/*` to the Render service, preserving same-origin API calls in the browser.
+The FastAPI app, frontend, API, and background worker deploy from this repository as one Vercel project. Analysis jobs go through Vercel Queues and are processed by the Vercel Daemon. PostgreSQL holds shared review/job/event data across serverless instances; private Vercel Blob stores generated workbooks. The review cache remains SQLite for local development. Vercel Services and Daemons are currently beta features; check that they are enabled for your account before deployment. This avoids relying on a function's temporary local filesystem or in-memory state for completed jobs.
 
-### 1. Deploy the backend to Render
+### 1. Import the project
 
-1. Push this repository to GitHub and open the repository in Render's **New + → Blueprint** flow.
-2. Select `render.yaml` and create the `luxury-review-intelligence` web service. The Dockerfile starts one Uvicorn worker.
-3. Set `APIFY_TOKEN` as a secret in the Render service's Environment settings. Keep `DEMO_MODE=1` while validating the deployment; change it to `0` only when you want real Trustpilot collection and have checked the Apify account budget.
-4. Wait for the deployment to finish, then open `https://<your-render-service>.onrender.com/api/health`. It should return `{"ok":true}`. Copy the exact service hostname from Render.
+1. In Vercel choose **Add New → Project**, import `chiragchauhan07/Percepta`, and select the `main` branch.
+2. Keep the project root at the repository root.
+3. In **Build and Deployment**, set the project framework to **Services**. The `services` and `daemons` in `vercel.json` define the FastAPI service and its queue worker.
+4. Deploy once to create the Vercel project. The API requires its storage and queue credentials before analysis will work.
 
-The Blueprint currently uses Render's free plan. Free services can sleep and their filesystem is ephemeral, so SQLite cache/history and unfinished jobs are lost when the service restarts. For a persistent production cache, use a Render plan that supports a persistent disk, attach one at `/app/data` (the SQLite database is `data/reviews.db`), and keep one service instance. The workbook is created for the duration of a job and can be downloaded before the service restarts. A local seed database can be created with `python export_seed.py`; inspect it before committing.
+### 2. Connect durable storage and the job queue
 
-### 2. Connect and deploy the Vercel frontend
+1. In the Vercel project, open **Storage → Create Storage**, choose **Postgres** from the Marketplace, and connect a provider such as Neon to this project. Ensure the Production environment has a `DATABASE_URL` connection string. The app creates its tables on first run.
+2. In **Storage → Create Storage**, create a **private** Blob store and connect it to this project. Enable a read/write token and ensure `BLOB_READ_WRITE_TOKEN` is available to the Production environment. Report files expire after 30 days.
+3. Set `QUEUE_REGION=bom1` in the Production environment. The API and the Vercel Daemon use this same Vercel Queue region. The project uses the `luxury-review-jobs` topic.
+4. In **Settings → Environment Variables**, set `DEMO_MODE=1` for the first end-to-end check. Save the settings and redeploy so the functions and daemon receive them.
 
-1. Open `vercel.json` and replace `YOUR-RENDER-SERVICE` in the `/api/:path*` rewrite destination with the exact Render hostname, without `https://` or a trailing slash. For example, `https://luxury-review-intelligence-ab12.onrender.com/api/:path*`.
-2. Commit and push that hostname change to GitHub (or make the edit before the first push if you have not pushed yet).
-3. In Vercel, choose **Add New → Project**, import `chiragchauhan07/Percepta`, and deploy from the `main` branch. Keep the project root at the repository root. The checked-in config selects the `web/` output directory; no build command or API environment variable is needed.
-4. Open the Vercel deployment URL. The page should load, **Trustpilot** connection status should resolve, and a demo analysis should finish. With `DEMO_MODE=1`, the UI uses sample reviews; switch to `0` in Render after setting `APIFY_TOKEN` to enable fresh collection.
+Postgres and Blob are Vercel Marketplace integrations, so their database/storage service may be billed separately from Vercel compute. Check the selected plans and usage limits before enabling real review collection.
 
-The Vercel rewrite keeps browser API requests and EventSource updates on the Vercel hostname. Do not replace it with a direct browser-to-Render URL unless you also configure backend CORS for the Vercel domain. Every push to the connected GitHub branch triggers a new Vercel deployment.
+### 3. Configure Apify and run a smoke check
 
-### 3. Deployment smoke checks
+1. Add `APIFY_TOKEN` as a sensitive Production environment variable in Vercel. Never place it in frontend code or commit it to GitHub.
+2. Redeploy. Confirm `https://<your-vercel-domain>/api/health` returns `{"ok":true}` and `/api/status` reports demo mode.
+3. Start one sample analysis in the UI. Verify the live progress updates complete, results load, and the workbook download succeeds. In Vercel, confirm the `review-worker` Daemon is running and Queues show the `luxury-review-jobs` message being consumed.
+4. When ready for real collection, set `DEMO_MODE=0`, redeploy, confirm the UI reports **Apify connected**, and try a small order before raising collection limits.
 
-- Vercel home page and `/css/styles.css`, `/js/app.js`, and `/logo5.png` load successfully.
-- `https://<your-vercel-domain>/api/health` returns `{"ok":true}` through the rewrite.
-- The UI reports demo mode while `DEMO_MODE=1`; start one sample analysis and confirm progress events complete and the results appear.
-- After entering `APIFY_TOKEN` in Render and setting `DEMO_MODE=0`, refresh the connection status and verify the UI reports Apify connected before placing a small real order.
-
-Never put `APIFY_TOKEN` in Vercel, frontend JavaScript, `vercel.json`, or GitHub. Keep it only as a Render secret. Review the Apify budget before testing real collection.
+Set the `main` branch as Production Branch in Vercel. Subsequent pushes to `main` will deploy the complete service and daemon together. Queue messages are partitioned by deployment. If preview data must be isolated from production data, give the Preview environment its own `DATABASE_URL` as well.
 
 ## Environment variables
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `APIFY_TOKEN` | Apify credential; never returned by the API or logged | unset |
+| `DATABASE_URL` | Vercel Marketplace PostgreSQL connection string; enables persistent mode | unset (local SQLite) |
+| `BLOB_READ_WRITE_TOKEN` | Private Vercel Blob access for Excel workbooks | unset |
+| `QUEUE_REGION` | Vercel Queue region used by API and daemon | `bom1` |
 | `DAILY_BUDGET_USD` | Maximum estimated daily Apify spend | `1.50` |
 | `MAX_BRANDS_PER_JOB` | Maximum brands in one order | `6` |
 | `MAX_PER_BRAND` | Maximum requested reviews per brand | `100` |

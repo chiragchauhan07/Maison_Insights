@@ -1,5 +1,7 @@
 """Create the six-sheet Excel report and optional charts."""
 from datetime import datetime
+from pathlib import Path
+import os
 import pandas as pd
 from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
@@ -11,7 +13,7 @@ from sentiment import get_themes
 
 def export_workbook(clean_df, sentiment_df, stats, path=None):
     """Write cleaned data, analysis and collection history to Excel."""
-    output_dir = BASE_DIR / "outputs"
+    output_dir = Path("/tmp/maison-insights-exports") if (os.getenv("VERCEL") or os.getenv("DATABASE_URL")) else BASE_DIR / "outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
     path = path or output_dir / f"luxury_sentiment_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     mismatch_count = int(stats.get("rating_sentiment_mismatch_count",

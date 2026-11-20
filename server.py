@@ -14,7 +14,7 @@ import uuid
 
 import pandas as pd
 from fastapi import FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -91,6 +91,10 @@ def _demo_enabled():
     return os.getenv("DEMO_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _vercel_queue_enabled():
+    return os.getenv("VERCEL") == "1" and os.getenv("VERCEL_ENV") in {"production", "preview"}
+
+
 def _utc_now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -128,10 +132,14 @@ class JobManager:
         self.queue_changed = Condition(self.lock)
 
     def queue_length(self):
+        if database._postgres_configured():
+            return database.count_open_jobs()
         with self.lock:
             return len(self.queue) + (1 if self.active_job else 0)
 
     def reserved_cost(self):
+        if database._postgres_configured():
+            return sum(database.get_reserved_costs())
         with self.lock:
             return sum(job["estimated_cost_usd"] for job in self.jobs.values()
                        if job["status"] in {"queued", "running"} and not job["demo"])
@@ -139,8 +147,17 @@ class JobManager:
     def daily_budget_left(self):
         return max(0.0, round(_daily_budget() - get_daily_spend() - self.reserved_cost(), 4))
 
+    def get_job(self, job_id, refresh=False):
+        job = self.jobs.get(job_id)
+        if database._postgres_configured() and (job is None or refresh):
+            job = database.load_job(job_id)
+            if job is not None:
+                job["event_condition"] = Condition(RLock())
+                self.jobs[job_id] = job
+        return job
+
     def emit(self, job_id, stage, kind, brand="", message="", cached=False, counts=None, item=None):
-        job = self.jobs[job_id]
+        job = self.get_job(job_id)
         with job["event_condition"]:
             event = {
                 "seq": len(job["events"]) + 1, "ts": _utc_now(), "stage": stage, "type": kind,
@@ -148,11 +165,13 @@ class JobManager:
             }
             if item is not None:
                 event["item"] = item
+            if database._postgres_configured():
+                database.append_job_event(job_id, event)
             job["events"].append(event)
             job["event_condition"].notify_all()
             return event
 
-    def create(self, payload, requester_ip, admin=False, force_demo=False):
+    async def create(self, payload, requester_ip, admin=False, force_demo=False):
         config = _config()
         catalog = config["brands"]
         aliases = config.get("aliases", {})
@@ -170,6 +189,8 @@ class JobManager:
             raise HTTPException(400, f"Choose no more than {max_per_brand} reviews per brand.")
 
         demo = bool(force_demo or payload.demo or _demo_enabled())
+        if _vercel_queue_enabled() and not database._postgres_configured():
+            raise HTTPException(503, "Postgres storage is not connected to this Vercel project yet.")
         cached = {brand for brand in canonical if _is_cached(brand, payload.per_brand, payload.refresh)}
         uncached = [brand for brand in canonical if brand not in cached]
         if not demo and uncached and not get_apify_token():
@@ -190,7 +211,7 @@ class JobManager:
             if self.queue_length() >= 50 and not admin:
                 raise HTTPException(503, "The analysis queue is full. Please try again later.")
             job_id = uuid.uuid4().hex
-            position = len(self.queue) + (1 if self.active_job else 0) + 1
+            position = self.queue_length() + 1
             event_condition = Condition(RLock())
             job = {
                 "id": job_id, "brands": canonical, "per_brand": payload.per_brand,
@@ -201,7 +222,10 @@ class JobManager:
                 "reviews": [], "excel_path": "", "billable_runs": 0,
             }
             self.jobs[job_id] = job
-            self.queue.append(job_id)
+            if database._postgres_configured():
+                database.save_job(job)
+            if not _vercel_queue_enabled():
+                self.queue.append(job_id)
             if not admin:
                 record_ip_job(ip_hash, job_id)
             self.emit(job_id, "order", "stage_start", message=f"Order accepted for {len(canonical)} brand(s).")
@@ -210,8 +234,23 @@ class JobManager:
             self.emit(job_id, "order", "stage_done", message="Analysis request accepted.")
             if position > 1:
                 self.emit(job_id, "order", "progress", message=f"You're #{position} in line.")
-            thread = Thread(target=self._run_job, args=(job_id,), daemon=True, name=f"review-job-{job_id[:8]}")
-            thread.start()
+            if _vercel_queue_enabled():
+                try:
+                    from vercel.queue import QueueClient
+                    queue = QueueClient(region=os.getenv("QUEUE_REGION", "bom1"))
+                    await queue.send("luxury-review-jobs", {"job_id": job_id},
+                                     retention=timedelta(days=7), idempotency_key=job_id)
+                except Exception as error:
+                    logger.error("Could not queue job %s (%s).", job_id[:8], type(error).__name__)
+                    job["status"] = "failed"
+                    job["result"] = {"stats": {}, "brand_status": {}, "errors": ["The analysis could not be queued. Please try again later."], "charts": {}, "sample_reviews": [], "demo": bool(job["demo"])}
+                    job["finished"] = True
+                    database.update_job(job_id, status="failed", result=job["result"], finished=True)
+                    self.emit(job_id, "serve", "error", message="The analysis could not be queued. Please try again later.")
+                    raise HTTPException(503, "The analysis queue is unavailable. Please try again later.") from error
+            else:
+                thread = Thread(target=self._run_job, args=(job_id,), daemon=True, name=f"review-job-{job_id[:8]}")
+                thread.start()
             return {"job_id": job_id, "estimated_cost_usd": round(cost, 4),
                     "estimated_seconds": 2 if demo else max(2, 70 * len(uncached) + 2 * len(cached)),
                     "queue_position": position}
@@ -239,15 +278,32 @@ class JobManager:
                          "reviewUrl": f"https://www.trustpilot.com/reviews/demo-{brand.lower().replace(' ', '-')}-{index}"})
         return rows
 
-    def _run_job(self, job_id):
-        job = self.jobs[job_id]
-        with self.queue_changed:
-            while not self.queue or self.queue[0] != job_id or self.active_job is not None:
-                self.queue_changed.wait()
-            self.queue.popleft()
-            self.active_job = job_id
-            job["status"] = "running"
-            self.queue_changed.notify_all()
+    def process_queued_job(self, job_id):
+        """Load a durable Vercel queue item and run it in the daemon process."""
+        job = database.load_job(job_id)
+        if not job:
+            logger.warning("Queue message refers to missing job %s.", str(job_id)[:8])
+            return
+        job["event_condition"] = Condition(RLock())
+        self.jobs[job_id] = job
+        self._run_job(job_id, claimed=True)
+
+    def _run_job(self, job_id, claimed=False):
+        job = self.get_job(job_id)
+        if not claimed:
+            with self.queue_changed:
+                while not self.queue or self.queue[0] != job_id or self.active_job is not None:
+                    self.queue_changed.wait()
+                self.queue.popleft()
+                self.active_job = job_id
+                job["status"] = "running"
+                self.queue_changed.notify_all()
+        else:
+            with self.queue_changed:
+                self.active_job = job_id
+                job["status"] = "running"
+        if database._postgres_configured():
+            database.update_job(job_id, status="running")
         self.emit(job_id, "order", "progress", message="Your analysis has entered the collection queue.")
         try:
             def collection_function(brand, domain, limit):
@@ -258,6 +314,8 @@ class JobManager:
                 def poll_event(info):
                     if not started[0]:
                         job["billable_runs"] += 1
+                        if database._postgres_configured():
+                            database.update_job(job_id, billable_runs=job["billable_runs"])
                         started[0] = True
                     self.emit(job_id, "fetch", "progress", brand, info.get("message", "Apify is working."),
                               counts={"fetched": info.get("item_count") or 0,
@@ -291,6 +349,17 @@ class JobManager:
                         row.pop(key, None)
             job["reviews"] = review_rows
             job["excel_path"] = result.get("excel_path", "")
+            if database._postgres_configured() and job["excel_path"]:
+                if not os.getenv("BLOB_READ_WRITE_TOKEN"):
+                    raise RuntimeError("Vercel Blob read/write token is not configured")
+                from vercel import blob
+                workbook = Path(job["excel_path"])
+                uploaded = __import__("asyncio").run(blob.put_blob(
+                    f"analysis-reports/{job_id}.xlsx", workbook.read_bytes(), access="private",
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    ttl_days=30,
+                ))
+                job["excel_path"] = uploaded.url
             raw_status = result.get("brand_status", {})
             safe_status = {brand: ("Collection failed; see the server log." if str(message).startswith("failed:") else message)
                            for brand, message in raw_status.items()}
@@ -300,6 +369,8 @@ class JobManager:
                 "errors": safe_errors, "charts": {name: records for name, records in chart_json.items() if name not in {"reviews", "analysis_reviews"}},
                 "sample_reviews": review_rows[:10],
             }
+            if database._postgres_configured():
+                database.update_job(job_id, reviews=review_rows, excel_path=job["excel_path"], result=job["result"])
             if not job["demo"]:
                 collected = int(result.get("stats", {}).get("total_collected_this_run", 0))
                 actual_estimate = job["billable_runs"] * 0.005 + collected * 0.001
@@ -308,14 +379,20 @@ class JobManager:
                       counts={"fetched": int(result.get("stats", {}).get("total_collected_this_run", 0)),
                               "scored": int(result.get("stats", {}).get("final_unique", 0))})
             job["status"] = "done"
+            if database._postgres_configured():
+                database.update_job(job_id, status="done")
         except Exception as error:
             logger.error("Job %s failed (%s).", job_id[:8], type(error).__name__)
             job["status"] = "failed"
             job["result"] = {"stats": {}, "brand_status": {}, "errors": ["The analysis could not finish. Please try again later."], "charts": {}, "sample_reviews": [], "demo": bool(job["demo"])}
+            if database._postgres_configured():
+                database.update_job(job_id, status="failed", result=job["result"])
             self.emit(job_id, "serve", "error", message="The analysis could not finish. Please try again later.")
         finally:
             with job["event_condition"]:
                 job["finished"] = True
+                if database._postgres_configured():
+                    database.update_job(job_id, finished=True)
                 job["event_condition"].notify_all()
             with self.queue_changed:
                 self.active_job = None
@@ -328,6 +405,12 @@ manager = JobManager()
 @app.on_event("startup")
 def seed_database_if_available():
     """Copy an optional ignored seed database only when the local cache is absent."""
+    if os.getenv("VERCEL") == "1" and not os.getenv("DATABASE_URL"):
+        logger.warning("Vercel Postgres is not connected yet; API data routes will remain unavailable.")
+        return
+    if os.getenv("VERCEL") == "1" or database._postgres_configured():
+        database.init_db()
+        return
     database_path = BASE_DIR / "data" / "reviews.db"
     seed_path = BASE_DIR / "seed" / "reviews_seed.db"
     if not database_path.exists() and seed_path.is_file():
@@ -337,12 +420,19 @@ def seed_database_if_available():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True}
+    return {"ok": True, "database_configured": bool(os.getenv("DATABASE_URL")) or not os.getenv("VERCEL")}
 
 
 @app.get("/api/status")
 def status():
     demo_mode = _demo_enabled()
+    if os.getenv("VERCEL") == "1" and not os.getenv("DATABASE_URL"):
+        return {"apify_configured": False, "demo_mode": demo_mode,
+                "daily_budget_left_usd": _daily_budget(), "queue_length": 0,
+                "max_per_brand": min(_env_int("MAX_PER_BRAND", _config()["server"].get("max_per_brand", 100)),
+                                     _config()["apify"]["max_reviews_per_brand"]),
+                "max_brands_per_job": _env_int("MAX_BRANDS_PER_JOB", _config()["server"].get("max_brands_per_job", 6)),
+                "storage_configured": False}
     return {"apify_configured": False if demo_mode else bool(get_apify_token()), "demo_mode": demo_mode,
             "daily_budget_left_usd": manager.daily_budget_left(), "queue_length": manager.queue_length(),
             "max_per_brand": min(_env_int("MAX_PER_BRAND", _config()["server"].get("max_per_brand", 100)),
@@ -353,7 +443,7 @@ def status():
 @app.get("/api/brands")
 def brands():
     config = _config()
-    overview = get_overview_stats()
+    overview = get_overview_stats() if (os.getenv("VERCEL") != "1" or os.getenv("DATABASE_URL")) else {"per_brand": {}}
     return [{"name": name, "category": info["category"], "domain": info["domain"],
              "verified": bool(info.get("verified", False)),
              "cached_reviews": overview["per_brand"].get(name, {}).get("review_count", 0),
@@ -364,16 +454,16 @@ def brands():
 
 
 @app.post("/api/jobs")
-def create_job(payload: JobRequest, request: Request, x_admin_key: str | None = Header(default=None)):
+async def create_job(payload: JobRequest, request: Request, x_admin_key: str | None = Header(default=None)):
     configured_admin = os.getenv("ADMIN_KEY", "")
     admin = bool(configured_admin and x_admin_key and hmac.compare_digest(configured_admin, x_admin_key))
     client_ip = request.client.host if request.client else "unknown"
-    return manager.create(payload, client_ip, admin=admin)
+    return await manager.create(payload, client_ip, admin=admin)
 
 
 @app.get("/api/jobs/{job_id}/events")
 def job_events(job_id: str, request: Request, last_event_id: int | None = Query(default=None)):
-    job = manager.jobs.get(job_id)
+    job = manager.get_job(job_id, refresh=True)
     if not job:
         raise HTTPException(404, "Order not found.")
     header_id = request.headers.get("last-event-id")
@@ -387,6 +477,19 @@ def job_events(job_id: str, request: Request, last_event_id: int | None = Query(
     def stream():
         nonlocal cursor
         while True:
+            if database._postgres_configured():
+                pending = database.read_job_events(job_id, cursor)
+                if pending:
+                    for event in pending:
+                        cursor = event["seq"]
+                        yield f"id: {cursor}\nevent: pipeline\ndata: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+                    continue
+                latest = manager.get_job(job_id, refresh=True)
+                if latest and latest["finished"]:
+                    break
+                time.sleep(2)
+                yield ": analysis is running\n\n"
+                continue
             with job["event_condition"]:
                 pending = [event for event in job["events"] if event["seq"] > cursor]
                 finished = job["finished"]
@@ -409,7 +512,7 @@ def job_events(job_id: str, request: Request, last_event_id: int | None = Query(
 
 @app.get("/api/jobs/{job_id}/result")
 def job_result(job_id: str):
-    job = manager.jobs.get(job_id)
+    job = manager.get_job(job_id, refresh=True)
     if not job:
         raise HTTPException(404, "Order not found.")
     if not job["finished"]:
@@ -419,7 +522,7 @@ def job_result(job_id: str):
 
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str):
-    job = manager.jobs.get(job_id)
+    job = manager.get_job(job_id, refresh=True)
     if not job:
         raise HTTPException(404, "Order not found.")
     return {"job_id": job_id, "status": job["status"], "brands": job["brands"],
@@ -430,7 +533,7 @@ def job_status(job_id: str):
 def job_reviews(job_id: str, page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=100),
                 sentiment: str | None = Query(default=None, pattern="^(Positive|Neutral|Negative)$"),
                 brand: str | None = Query(default=None, max_length=80)):
-    job = manager.jobs.get(job_id)
+    job = manager.get_job(job_id, refresh=True)
     if not job:
         raise HTTPException(404, "Order not found.")
     rows = list(job.get("reviews", []))
@@ -443,12 +546,25 @@ def job_reviews(job_id: str, page: int = Query(default=1, ge=1), page_size: int 
 
 
 @app.get("/api/jobs/{job_id}/download")
-def job_download(job_id: str):
-    job = manager.jobs.get(job_id)
+async def job_download(job_id: str):
+    job = manager.get_job(job_id, refresh=True)
     if not job:
         raise HTTPException(404, "Order not found.")
-    path = Path(job.get("excel_path", ""))
-    if not job["finished"] or not path.is_file():
+    path_value = job.get("excel_path", "")
+    if not job["finished"] or not path_value:
+        raise HTTPException(404, "The workbook is not ready yet.")
+    if str(path_value).startswith("https://"):
+        try:
+            from vercel import blob
+            download = await blob.get_blob(path_value, access="private")
+        except Exception as error:
+            logger.error("Workbook download failed for job %s (%s).", job_id[:8], type(error).__name__)
+            raise HTTPException(502, "The workbook could not be downloaded right now.") from error
+        return Response(content=download.body,
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": "attachment; filename=maison-insights-report.xlsx"})
+    path = Path(path_value)
+    if not path.is_file():
         raise HTTPException(404, "The workbook is not ready yet.")
     return FileResponse(path, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         filename=path.name)

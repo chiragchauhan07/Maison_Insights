@@ -25,17 +25,21 @@ def get_apify_token():
 
 def setup_logging():
     """Log to the collection file and console without exposing secrets."""
-    log_dir = BASE_DIR / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("luxury_sentiment")
     if not logger.handlers:
         logger.setLevel(logging.INFO)
         formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-        file_handler = logging.FileHandler(log_dir / "collection.log", encoding="utf-8")
-        file_handler.setFormatter(formatter)
+        if not (os.getenv("VERCEL") or os.getenv("DATABASE_URL")):
+            log_dir = BASE_DIR / "logs"
+            try:
+                log_dir.mkdir(parents=True, exist_ok=True)
+                file_handler = logging.FileHandler(log_dir / "collection.log", encoding="utf-8")
+                file_handler.setFormatter(formatter)
+                logger.addHandler(file_handler)
+            except OSError:
+                pass
         console = logging.StreamHandler()
         console.setFormatter(formatter)
-        logger.addHandler(file_handler)
         logger.addHandler(console)
     return logger
 
