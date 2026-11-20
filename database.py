@@ -110,6 +110,11 @@ def _create_schema(is_postgres):
     definitions = [f'"{name}" INTEGER' if name == "Rating" else f'"{name}" TEXT' for name in ALL_COLUMNS]
     definitions[0] = '"Review_ID" TEXT PRIMARY KEY'
     with _connect() as connection:
+        if is_postgres:
+            # Vercel may cold-start several function instances simultaneously.
+            # Serialize DDL so concurrent CREATE TABLE IF NOT EXISTS statements
+            # cannot race while PostgreSQL registers the table's composite type.
+            _execute(connection, "SELECT pg_advisory_xact_lock(704196885201468731)")
         _execute(connection, f"CREATE TABLE IF NOT EXISTS reviews ({', '.join(definitions)})")
         _execute(connection, """CREATE TABLE IF NOT EXISTS collection_runs (
             run_id TEXT PRIMARY KEY, brand TEXT, started_at TEXT, finished_at TEXT,
@@ -217,10 +222,17 @@ def get_overview_stats():
     with _connect() as connection:
         counts = dict(_execute(connection, 'SELECT "Brand", COUNT(*) FROM reviews GROUP BY "Brand"').fetchall())
         total = _execute(connection, "SELECT COUNT(*) FROM reviews").fetchone()[0]
-        last_dates = dict(_execute(connection, "SELECT brand, MAX(finished_at) FROM collection_runs "
-                                    "WHERE status IN ('success','exhausted') GROUP BY brand").fetchall())
+        runs = _execute(connection, "SELECT brand, status, finished_at FROM collection_runs "
+                         "WHERE status IN ('success','exhausted') ORDER BY finished_at DESC").fetchall()
+    last_dates, last_statuses = {}, {}
+    for brand, status, finished_at in runs:
+        if brand not in last_dates:
+            last_dates[brand] = finished_at
+            last_statuses[brand] = status
     per_brand = {brand: {"review_count": int(counts.get(brand, 0)),
-                         "last_collected": last_dates.get(brand, "Not collected")} for brand in config_brands}
+                         "last_collected": last_dates.get(brand, "Not collected"),
+                         "cache_exhausted": last_statuses.get(brand) == "exhausted"}
+                 for brand in config_brands}
     return {"total_reviews": int(total), "per_brand": per_brand}
 
 

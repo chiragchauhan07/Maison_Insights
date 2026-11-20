@@ -447,8 +447,7 @@ def brands():
     return [{"name": name, "category": info["category"], "domain": info["domain"],
              "verified": bool(info.get("verified", False)),
              "cached_reviews": overview["per_brand"].get(name, {}).get("review_count", 0),
-             "cache_exhausted": bool((latest_collection(name) or {}).get("status") == "exhausted"),
-             "cache_exhausted": bool((latest_collection(name) or {}).get("status") == "exhausted"),
+             "cache_exhausted": overview["per_brand"].get(name, {}).get("cache_exhausted", False),
              "last_collected": overview["per_brand"].get(name, {}).get("last_collected", "Not collected")}
             for name, info in config["brands"].items()]
 
