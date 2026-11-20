@@ -12,19 +12,21 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect x='3' y='3' width='34' height='34' rx='11' fill='%23131618'/%3E%3Cpath d='M11 25l6-7 5 4 7-9' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/css/styles.css">
   <script src="/js/charts.js" defer></script>
+  <script src="/js/grid-pulse.js" defer></script>
   <script src="/js/app.js" defer></script>
 </head>
 <body>
   <main id="landing" class="landing" aria-labelledby="landing-title">
+    <div class="grid-pulse" data-grid-pulse aria-hidden="true"><canvas></canvas></div>
     <section class="landing-hero">
       <figure class="landing-art" aria-label="Maison Insights logo">
         <img src="/logo5.png" alt="Maison Insights">
       </figure>
       <div class="landing-copy">
-        <p class="landing-eyebrow"><span></span> CUSTOMER VOICE, CONSIDERED</p>
-        <h1 id="landing-title">Understand what<br>people <span class="rotating-word"><span id="rotating-word">value</span>.</span></h1>
-        <p class="landing-description">Make sense of what customers say. Explore public Trustpilot reviews across 36 luxury brands, with sentiment, themes and the details behind each score.</p>
-        <button id="landing-start" class="button landing-cta" type="button">Start Analysis <span aria-hidden="true">↗</span></button>
+        <p class="landing-eyebrow" data-grid-avoid><span></span> CUSTOMER VOICE, CONSIDERED</p>
+        <h1 id="landing-title" data-grid-avoid>Understand what<br>people <span class="rotating-word"><span id="rotating-word">value</span>.</span></h1>
+        <p class="landing-description" data-grid-avoid>Make sense of what customers say. Explore public Trustpilot reviews across 36 luxury brands, with sentiment, themes and the details behind each score.</p>
+        <button id="landing-start" class="button landing-cta" type="button" data-grid-avoid>Start Analysis <span aria-hidden="true">↗</span></button>
       </div>
     </section>
   </main>

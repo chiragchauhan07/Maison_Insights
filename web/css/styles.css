@@ -459,10 +459,12 @@ button, a, input, select { -webkit-tap-highlight-color: transparent; }
 /* Editorial landing page */
 :root { --display: var(--sans); }
 body { font-size: 16px; line-height: 1.6; }
-.landing { min-height: 100vh; min-height: 100svh; display: grid; place-items: center; overflow: hidden; padding: clamp(28px, 7vh, 72px) clamp(22px, 6vw, 88px); background: var(--page); }
+.landing { position: relative; min-height: 100vh; min-height: 100svh; display: grid; place-items: center; overflow: hidden; padding: clamp(28px, 7vh, 72px) clamp(22px, 6vw, 88px); background: var(--page); }
+.grid-pulse { --grid-pulse-cell: 26px; position: absolute; z-index: 0; inset: 0; overflow: hidden; pointer-events: none; background-image: linear-gradient(to right, rgba(42, 42, 42, .055) 1px, transparent 1px), linear-gradient(to bottom, rgba(42, 42, 42, .055) 1px, transparent 1px); background-size: var(--grid-pulse-cell) var(--grid-pulse-cell); mask-image: linear-gradient(to bottom, #000 80%, transparent 100%); }
+.grid-pulse canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .landing-wordmark { display: flex; align-items: center; gap: 12px; color: var(--ink); font: 500 17px/1 var(--sans); letter-spacing: -.5px; text-decoration: none; }
 .landing-wordmark-mark { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; background: var(--ink); color: #fff; font-size: 13px; font-weight: 500; letter-spacing: .04em; }
-.landing-hero { position: relative; display: grid; width: min(1320px, 100%); grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); align-items: center; gap: clamp(42px, 7vw, 108px); margin: auto; padding: 0; text-align: left; }
+.landing-hero { position: relative; z-index: 1; display: grid; width: min(1320px, 100%); grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); align-items: center; gap: clamp(42px, 7vw, 108px); margin: auto; padding: 0; text-align: left; }
 .landing-copy { grid-column: 1; grid-row: 1; max-width: 670px; text-align: left; }
 .landing-eyebrow { display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin: 0 0 20px; color: #59635f; font-size: 13px; font-weight: 600; letter-spacing: .13em; }
 .landing-eyebrow > span { width: 9px; height: 9px; border-radius: 50%; background: var(--teal); }
